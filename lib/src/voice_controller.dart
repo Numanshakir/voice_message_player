@@ -31,7 +31,7 @@ import 'package:voice_message_package/src/helpers/utils.dart';
 ///
 class VoiceController extends MyTicker {
   final String audioSrc;
-  late Duration maxDuration;
+  Duration ? maxDuration;
   Duration currentDuration = Duration.zero;
   final Function() onComplete;
   final Function() onPlaying;
@@ -74,14 +74,14 @@ class VoiceController extends MyTicker {
 
   bool get isPause => playStatus == PlayStatus.pause;
 
-  double get maxMillSeconds => maxDuration.inMilliseconds.toDouble();
+  double get maxMillSeconds => maxDuration?.inMilliseconds.toDouble()??0.0;
 
   StreamSubscription<FileResponse>? downloadStreamSubscription;
-
+  final constDuration =const Duration(seconds: 24);
   /// Creates a new [VoiceController] instance.
   VoiceController({
     required this.audioSrc,
-    required this.maxDuration,
+    this.maxDuration,
     required this.isFile,
     required this.onComplete,
     required this.onPause,
@@ -95,7 +95,7 @@ class VoiceController extends MyTicker {
     animController = AnimationController(
       vsync: this,
       upperBound: noiseWidth,
-      duration: maxDuration,
+      duration: maxDuration??constDuration,
     );
     init();
     _listenToRemindingTime();
@@ -142,18 +142,20 @@ class VoiceController extends MyTicker {
 
   void _listenToRemindingTime() {
     positionStream = _player.positionStream.listen((Duration p) async {
-      if (!isDownloading) currentDuration = p;
+      if(maxMillSeconds!=0.0){
+        if (!isDownloading) currentDuration = p;
 
-      final value = (noiseWidth * currentMillSeconds) / maxMillSeconds;
-      animController.value = value;
-      _updateUi();
-      if (p.inMilliseconds >= maxMillSeconds) {
-        await _player.stop();
-        currentDuration = Duration.zero;
-        playStatus = PlayStatus.init;
-        animController.reset();
+        final value = (noiseWidth * currentMillSeconds) / maxMillSeconds;
+        animController.value = value;
         _updateUi();
-        onComplete();
+        if (p.inMilliseconds >= maxMillSeconds) {
+          await _player.stop();
+          currentDuration = Duration.zero;
+          playStatus = PlayStatus.init;
+          animController.reset();
+          _updateUi();
+          onComplete();
+        }
       }
     });
   }
@@ -208,7 +210,7 @@ class VoiceController extends MyTicker {
       return audioSrc;
     }
     final p =
-        await DefaultCacheManager().getSingleFile(audioSrc, key: cacheKey);
+    await DefaultCacheManager().getSingleFile(audioSrc, key: cacheKey);
     return p.path;
   }
 
@@ -295,14 +297,17 @@ class VoiceController extends MyTicker {
 
   ///
   String get remindingTime {
+    if(maxDuration==null){
+      return "00:00";
+    }
     if (currentDuration == Duration.zero) {
-      return maxDuration.formattedTime;
+      return maxDuration!.formattedTime;
     }
     if (isSeeking || isPause) {
       return currentDuration.formattedTime;
     }
     if (isInit) {
-      return maxDuration.formattedTime;
+      return maxDuration!.formattedTime;
     }
     return currentDuration.formattedTime;
   }
@@ -312,7 +317,7 @@ class VoiceController extends MyTicker {
     try {
       /// get the max duration from the path or cloud
       final maxDuration =
-          isFile ? await _player.setFilePath(path) : await _player.setUrl(path);
+      isFile ? await _player.setFilePath(path) : await _player.setUrl(path);
       if (maxDuration != null) {
         this.maxDuration = maxDuration;
         animController.duration = maxDuration;
